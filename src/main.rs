@@ -33,7 +33,7 @@ fn manifest() -> Value {
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": "1.1",
         "tools": [],
-        "description": "turn",
+        "description": "turn timing, tokens and usage figures",
         "commands": ["/telemetry", "/observe", "/stamps", "/usage", "/tokens"],
         "completion": ["all", "reset"],
         "hooks": ["prompt/context"],
