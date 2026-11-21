@@ -10,7 +10,7 @@
 //! for the live-session row.
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -43,12 +43,54 @@ pub struct Rate {
 /// column as an estimate.
 fn builtin_rates() -> Vec<(&'static str, Rate)> {
     vec![
-        ("claude-opus", Rate { input: 15.0, output: 75.0, cache_read: 1.50 }),
-        ("claude-sonnet", Rate { input: 3.0, output: 15.0, cache_read: 0.30 }),
-        ("claude-haiku", Rate { input: 0.80, output: 4.0, cache_read: 0.08 }),
-        ("gpt-5", Rate { input: 1.25, output: 10.0, cache_read: 0.125 }),
-        ("grok-4", Rate { input: 3.0, output: 15.0, cache_read: 0.75 }),
-        ("grok-code", Rate { input: 1.50, output: 15.0, cache_read: 0.15 }),
+        (
+            "claude-opus",
+            Rate {
+                input: 15.0,
+                output: 75.0,
+                cache_read: 1.50,
+            },
+        ),
+        (
+            "claude-sonnet",
+            Rate {
+                input: 3.0,
+                output: 15.0,
+                cache_read: 0.30,
+            },
+        ),
+        (
+            "claude-haiku",
+            Rate {
+                input: 0.80,
+                output: 4.0,
+                cache_read: 0.08,
+            },
+        ),
+        (
+            "gpt-5",
+            Rate {
+                input: 1.25,
+                output: 10.0,
+                cache_read: 0.125,
+            },
+        ),
+        (
+            "grok-4",
+            Rate {
+                input: 3.0,
+                output: 15.0,
+                cache_read: 0.75,
+            },
+        ),
+        (
+            "grok-code",
+            Rate {
+                input: 1.50,
+                output: 15.0,
+                cache_read: 0.15,
+            },
+        ),
     ]
 }
 
@@ -154,7 +196,11 @@ pub fn scan_sessions(limit: Option<usize>) -> (Vec<SessionRow>, usize) {
     files.sort_by_key(|p| {
         std::fs::metadata(p)
             .and_then(|m| m.modified())
-            .map(|t| std::time::SystemTime::now().duration_since(t).unwrap_or_default())
+            .map(|t| {
+                std::time::SystemTime::now()
+                    .duration_since(t)
+                    .unwrap_or_default()
+            })
             .unwrap_or_default()
     });
     let total = files.len();
@@ -181,9 +227,18 @@ pub struct Live {
 fn live_path(sid: &str) -> PathBuf {
     let safe: String = sid
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
-    gray_home().join("usage").join("live").join(format!("{safe}.json"))
+    gray_home()
+        .join("usage")
+        .join("live")
+        .join(format!("{safe}.json"))
 }
 
 /// Fold one `turn_end` usage into `~/.gray/usage/live/<sid>.json`.
@@ -217,12 +272,16 @@ fn live_rows() -> Vec<(String, Live)> {
             if let Ok(l) = std::fs::read_to_string(&p)
                 .and_then(|s| serde_json::from_str::<Live>(&s).map_err(|e| e.into()))
             {
-                let sid = p.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+                let sid = p
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
                 out.push((sid, l));
             }
         }
     }
-    out.sort_by(|a, b| b.1.turns.cmp(&a.1.turns));
+    out.sort_by_key(|a| std::cmp::Reverse(a.1.turns));
     out
 }
 
@@ -251,15 +310,14 @@ fn balance_map() -> Vec<(String, Balance)> {
     .unwrap_or_default()
     .into_iter()
     .collect();
-    if let Ok(raw) = std::fs::read_to_string(cfg_path()) {
-        if let Ok(v) = serde_json::from_str::<Value>(&raw) {
-            if let Some(m) = v["providers"].as_object() {
-                for (k, b) in m {
-                    if let Ok(b) = serde_json::from_value::<Balance>(b.clone()) {
-                        map.retain(|(n, _)| n != k);
-                        map.push((k.clone(), b));
-                    }
-                }
+    if let Ok(raw) = std::fs::read_to_string(cfg_path())
+        && let Ok(v) = serde_json::from_str::<Value>(&raw)
+        && let Some(m) = v["providers"].as_object()
+    {
+        for (k, b) in m {
+            if let Ok(b) = serde_json::from_value::<Balance>(b.clone()) {
+                map.retain(|(n, _)| n != k);
+                map.push((k.clone(), b));
             }
         }
     }
@@ -267,12 +325,11 @@ fn balance_map() -> Vec<(String, Balance)> {
 }
 
 fn auth_token(b: &Balance) -> Option<String> {
-    if !b.auth_env.is_empty() {
-        if let Ok(t) = std::env::var(&b.auth_env) {
-            if !t.trim().is_empty() {
-                return Some(t);
-            }
-        }
+    if !b.auth_env.is_empty()
+        && let Ok(t) = std::env::var(&b.auth_env)
+        && !t.trim().is_empty()
+    {
+        return Some(t);
     }
     if !b.auth_key.is_empty() {
         let raw = std::fs::read_to_string(gray_home().join("auth.json")).ok()?;
@@ -296,7 +353,10 @@ fn private_header_file(header: &str) -> Option<(std::path::PathBuf, String)> {
         use std::os::unix::fs::OpenOptionsExt;
         o.mode(0o600);
     }
-    match o.open(&path).and_then(|mut f| f.write_all(header.as_bytes())) {
+    match o
+        .open(&path)
+        .and_then(|mut f| f.write_all(header.as_bytes()))
+    {
         Ok(()) => Some((path.clone(), format!("@{}", path.display()))),
         Err(_) => {
             let _ = std::fs::remove_file(&path);
@@ -351,16 +411,27 @@ fn collect_balance_fields(v: &Value, path: &str, out: &mut Vec<String>) {
     match v {
         Value::Object(m) => {
             for (k, x) in m {
-                let p = if path.is_empty() { k.clone() } else { format!("{path}.{k}") };
+                let p = if path.is_empty() {
+                    k.clone()
+                } else {
+                    format!("{path}.{k}")
+                };
                 collect_balance_fields(x, &p, out);
             }
         }
         Value::Number(n) => {
             let leaf = path.rsplit('.').next().unwrap_or(path).to_lowercase();
             if out.len() < 6
-                && ["balance", "credit", "credits", "remaining", "amount", "usage"]
-                    .iter()
-                    .any(|w| leaf.contains(w))
+                && [
+                    "balance",
+                    "credit",
+                    "credits",
+                    "remaining",
+                    "amount",
+                    "usage",
+                ]
+                .iter()
+                .any(|w| leaf.contains(w))
             {
                 out.push(format!("{path}={n}"));
             }
@@ -391,7 +462,9 @@ pub fn report(all: bool) -> String {
     let (mut ti, mut to, mut tc, mut cost_sum, mut priced) = (0u64, 0u64, 0u64, 0.0, false);
     for r in &rows {
         let c = cost(&r.model, r.input, r.output, r.cache_read);
-        let cs = c.map(|x| format!("{x:>8.2}")).unwrap_or_else(|| "       -".to_string());
+        let cs = c
+            .map(|x| format!("{x:>8.2}"))
+            .unwrap_or_else(|| "       -".to_string());
         if let Some(x) = c {
             cost_sum += x;
             priced = true;
@@ -417,7 +490,11 @@ pub fn report(all: bool) -> String {
         fmt_num(ti),
         fmt_num(to),
         fmt_num(tc),
-        if priced { format!("{cost_sum:.2}") } else { "-".into() },
+        if priced {
+            format!("{cost_sum:.2}")
+        } else {
+            "-".into()
+        },
     ));
     let live = live_rows();
     if !live.is_empty() {
@@ -451,12 +528,14 @@ pub fn report(all: bool) -> String {
 /// `command/run` handler for `/usage` and `/tokens`.
 pub fn usage_command(argv: &[String]) -> Value {
     match argv.first().map(|s| s.as_str()) {
-        Some("all") | None => json!({"text": report(argv.first().is_some())}),
+        Some("all") | None => json!({"text": report(!argv.is_empty())}),
         Some("reset") => {
             let _ = std::fs::remove_dir_all(gray_home().join("usage").join("live"));
             json!({"text": "usage: live counters cleared"})
         }
-        Some(_) => json!({"text": "usage: /usage [all|reset] — per-session tokens+cost, live counters, provider balances"}),
+        Some(_) => {
+            json!({"text": "usage: /usage [all|reset] — per-session tokens+cost, live counters, provider balances"})
+        }
     }
 }
 
@@ -487,7 +566,10 @@ use std::io::{BufRead, Write};
 /// the loop to exit.
 pub fn handle_usage(req: &Value) -> (Option<Value>, bool) {
     if req["method"] == "plugin/shutdown" {
-        let reply = req.get("id").cloned().map(|id| json!({"id": id, "result": {}}));
+        let reply = req
+            .get("id")
+            .cloned()
+            .map(|id| json!({"id": id, "result": {}}));
         return (reply, true);
     }
     let Some(id) = req.get("id").cloned() else {
@@ -503,7 +585,11 @@ pub fn handle_usage(req: &Value) -> (Option<Value>, bool) {
         "command/run" => {
             let argv: Vec<String> = req["params"]["argv"]
                 .as_array()
-                .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
                 .unwrap_or_default();
             Ok(usage_command(&argv))
         }
@@ -541,7 +627,10 @@ fn main_usage() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(|s| s.as_str()) {
         Some("manifest") => println!("{}", manifest_usage()),
-        Some("report") => print!("{}", report(args.get(1).map(|s| s == "all").unwrap_or(false))),
+        Some("report") => print!(
+            "{}",
+            report(args.get(1).map(|s| s == "all").unwrap_or(false))
+        ),
         Some("reset") => {
             let _ = std::fs::remove_dir_all(gray_home().join("usage").join("live"));
             println!("usage: live counters cleared");
@@ -564,7 +653,11 @@ mod tests {
         let sess = dir.join("sessions");
         std::fs::create_dir_all(&sess).unwrap();
         let mut f = std::fs::File::create(sess.join("s1.jsonl")).unwrap();
-        writeln!(f, "{{\"version\":1,\"id\":\"s1\",\"model\":\"claude-sonnet-4\",\"timestamp\":5}}").unwrap();
+        writeln!(
+            f,
+            "{{\"version\":1,\"id\":\"s1\",\"model\":\"claude-sonnet-4\",\"timestamp\":5}}"
+        )
+        .unwrap();
         writeln!(f, "{{\"entry_id\":0,\"message\":{{\"role\":\"assistant\"}},\"usage\":{{\"input_tokens\":100,\"output_tokens\":10,\"cache_read_input_tokens\":60}}}}").unwrap();
         writeln!(f, "{{\"entry_id\":1,\"message\":{{\"role\":\"assistant\"}},\"usage\":{{\"input_tokens\":200,\"output_tokens\":20,\"cache_read_input_tokens\":150}}}}").unwrap();
         unsafe { std::env::set_var("GRAY_HOME", &dir) };
@@ -587,8 +680,11 @@ mod tests {
     #[test]
     fn turn_end_accumulates_live() {
         let dir = fixture_home("live");
-        record_turn("sid-1", &json!({"input_tokens": 50, "output_tokens": 5,
-            "cache_read_input_tokens": 30, "cache_write_input_tokens": 4}));
+        record_turn(
+            "sid-1",
+            &json!({"input_tokens": 50, "output_tokens": 5,
+            "cache_read_input_tokens": 30, "cache_write_input_tokens": 4}),
+        );
         record_turn("sid-1", &json!({"input_tokens": 50, "output_tokens": 5}));
         let rows = live_rows();
         assert_eq!(rows[0].1.turns, 2);

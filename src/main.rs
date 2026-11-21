@@ -88,7 +88,12 @@ fn handle(req: &Value, t: &Telemetry) -> (Option<Value>, bool) {
         "command/run" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or("");
             let reply = match name {
-                "/telemetry" => return (Some(json!({ "id": id, "result": { "text": telemetry_command() } })), false),
+                "/telemetry" => {
+                    return (
+                        Some(json!({ "id": id, "result": { "text": telemetry_command() } })),
+                        false,
+                    );
+                }
                 "/observe" => observe::handle_observe(req, &t.observe_dir).0,
                 "/stamps" => stamp::handle_stamp(req, &t.stamp).0,
                 "/usage" | "/tokens" => usage::handle_usage(req).0,
