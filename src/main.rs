@@ -17,6 +17,8 @@ use std::sync::Mutex;
 
 use serde_json::{Value, json};
 
+mod parts;
+
 #[allow(dead_code)]
 #[path = "mods/observe.rs"]
 mod observe;
@@ -27,16 +29,54 @@ mod stamp;
 #[path = "mods/usage.rs"]
 mod usage;
 
-fn manifest() -> Value {
+const PARTS: &[parts::Part] = &[
+    parts::Part {
+        name: "observe",
+        default: true,
+        description: "JSONL log of every turn and tool event",
+    },
+    parts::Part {
+        name: "stamp",
+        default: true,
+        description: "per-session timing ledger and last-turn annotation",
+    },
+    parts::Part {
+        name: "usage",
+        default: true,
+        description: "token and cost counters for the current turn",
+    },
+];
+
+fn manifest(parts: &parts::Parts) -> Value {
+    let mut commands: Vec<&str> = vec!["/telemetry"];
+    if parts.on("observe") {
+        commands.push("/observe");
+    }
+    if parts.on("stamp") {
+        commands.push("/stamps");
+    }
+    if parts.on("usage") {
+        commands.push("/usage");
+        commands.push("/tokens");
+    }
+    let mut completion: Vec<&str> = Vec::new();
+    if parts.on("usage") {
+        completion.extend(["all", "reset"]);
+    }
+    let mut hooks: Vec<&str> = Vec::new();
+    if parts.on("stamp") {
+        hooks.push("prompt/context");
+    }
     json!({
         "name": "telemetry",
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": "1.1",
         "tools": [],
         "description": "turn timing, tokens and usage figures",
-        "commands": ["/telemetry", "/observe", "/stamps", "/usage", "/tokens"],
-        "completion": ["all", "reset"],
-        "hooks": ["prompt/context"],
+        "commands": commands,
+        "completion": completion,
+        "hooks": hooks,
+        "parts": parts.manifest(PARTS),
     })
 }
 
@@ -66,22 +106,31 @@ fn telemetry_command() -> String {
     )
 }
 
-fn handle(req: &Value, t: &Telemetry) -> (Option<Value>, bool) {
+fn handle(req: &Value, t: &Telemetry, parts: &parts::Parts) -> (Option<Value>, bool) {
     let id = req.get("id").cloned();
     let method = req.get("method").and_then(Value::as_str).unwrap_or("");
     let params = req.get("params").cloned().unwrap_or(Value::Null);
     let Some(id) = id else {
         if method == "event/notify" {
             // All three ledgers observe the same events; none reply.
-            let _ = observe::handle_observe(req, &t.observe_dir);
-            let _ = stamp::handle_stamp(req, &t.stamp);
-            let _ = usage::handle_usage(req);
+            if parts.on("observe") {
+                let _ = observe::handle_observe(req, &t.observe_dir);
+            }
+            if parts.on("stamp") {
+                let _ = stamp::handle_stamp(req, &t.stamp);
+            }
+            if parts.on("usage") {
+                let _ = usage::handle_usage(req);
+            }
         }
         return (None, method == "plugin/shutdown");
     };
     let result = match method {
-        "plugin/manifest" => manifest(),
+        "plugin/manifest" => manifest(parts),
         "prompt/context" => {
+            if !parts.on("stamp") {
+                return (Some(json!({ "id": id, "result": {} })), false);
+            }
             let (reply, _) = stamp::handle_stamp(req, &t.stamp);
             return (reply, false);
         }
@@ -94,9 +143,9 @@ fn handle(req: &Value, t: &Telemetry) -> (Option<Value>, bool) {
                         false,
                     );
                 }
-                "/observe" => observe::handle_observe(req, &t.observe_dir).0,
-                "/stamps" => stamp::handle_stamp(req, &t.stamp).0,
-                "/usage" | "/tokens" => usage::handle_usage(req).0,
+                "/observe" if parts.on("observe") => observe::handle_observe(req, &t.observe_dir).0,
+                "/stamps" if parts.on("stamp") => stamp::handle_stamp(req, &t.stamp).0,
+                "/usage" | "/tokens" if parts.on("usage") => usage::handle_usage(req).0,
                 _ => None,
             };
             match reply {
@@ -117,8 +166,9 @@ fn handle(req: &Value, t: &Telemetry) -> (Option<Value>, bool) {
 }
 
 fn main() -> std::io::Result<()> {
+    let parts = parts::Parts::load("telemetry", PARTS);
     if std::env::args().nth(1).as_deref() == Some("manifest") {
-        println!("{}", manifest());
+        println!("{}", manifest(&parts));
         return Ok(());
     }
     let t = Telemetry::new();
@@ -129,7 +179,7 @@ fn main() -> std::io::Result<()> {
         let Ok(req) = serde_json::from_str::<Value>(&line) else {
             continue;
         };
-        let (reply, exit) = handle(&req, &t);
+        let (reply, exit) = handle(&req, &t, &parts);
         if let Some(reply) = reply {
             writeln!(stdout, "{reply}")?;
             stdout.flush()?;
