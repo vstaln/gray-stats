@@ -1,10 +1,10 @@
 <div align="center">
-  <img alt="gray-telemetry" src="assets/icon.svg" width="120" height="120" />
-  <h1>gray-telemetry</h1>
+  <img alt="gray-stats" src="assets/icon.svg" width="120" height="120" />
+  <h1>gray-stats</h1>
   <p><strong>One sidecar for every local event ledger.</strong></p>
   <p>
     <a href="https://gray.alignment.id">Website</a> ·
-    <a href="https://github.com/vstaln/gray-telemetry">Source</a> ·
+    <a href="https://github.com/vstaln/gray-stats">Source</a> ·
     <a href="https://github.com/vstaln/gray">gray</a>
   </p>
   <p>
@@ -17,10 +17,10 @@
 <br/>
 
 ```bash
-gray plugin install telemetry
+gray plugin install stats
 ```
 
-`gray-telemetry` merges three plugins that each record host events
+`gray-stats` merges three plugins that each record host events
 into one sidecar process. Each module keeps its own `~/.gray/<orig>/` state
 files and slash commands, so existing logs, ledgers and config keep working
 after you uninstall the standalone versions.
@@ -35,13 +35,13 @@ after you uninstall the standalone versions.
 
 No module defines tools. Every `event/notify` goes to all three modules.
 `prompt/context` only goes to stamp, which adds its one-line "last turn"
-timing note. `/telemetry` prints an overview of all three ledgers.
+timing note. `/stats` prints an overview of all three ledgers.
 
 ## Build from source
 
 ```sh
 cargo build --release
-gray plugin check ./target/release/telemetry
+gray plugin check ./target/release/stats
 ```
 
 ## License
