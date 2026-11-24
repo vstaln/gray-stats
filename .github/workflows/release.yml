@@ -54,8 +54,8 @@ jobs:
         run: |
           mkdir -p "stage/${{ matrix.target }}"
           ext=""; [ "${{ runner.os }}" = "Windows" ] && ext=".exe"
-          cp "target/${{ matrix.target }}/release/telemetry$ext" "stage/${{ matrix.target }}/telemetry$ext"
-          chmod 755 "stage/${{ matrix.target }}/telemetry$ext"
+          cp "target/${{ matrix.target }}/release/stats$ext" "stage/${{ matrix.target }}/stats$ext"
+          chmod 755 "stage/${{ matrix.target }}/stats$ext"
       - uses: actions/upload-artifact@v4
         with:
           name: leg-${{ matrix.target }}
@@ -83,7 +83,7 @@ jobs:
             -C stage plugin.sh \
             aarch64-apple-darwin aarch64-unknown-linux-musl \
             x86_64-apple-darwin x86_64-pc-windows-msvc x86_64-unknown-linux-musl \
-            | gzip -n -9 > "dist/gray-telemetry-${version}.tar.gz"
+            | gzip -n -9 > "dist/gray-stats-${version}.tar.gz"
           cd dist
-          shasum -a 256 "gray-telemetry-${version}.tar.gz" > "gray-telemetry-${version}.tar.gz.sha256"
+          shasum -a 256 "gray-stats-${version}.tar.gz" > "gray-stats-${version}.tar.gz.sha256"
           gh release create "$GITHUB_REF_NAME" ./* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes

@@ -1,12 +1,12 @@
 [package]
-name = "gray-telemetry"
-version = "0.1.5"
+name = "gray-stats"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
-description = "Merged telemetry plugin for the gray agent harness: observe, stamp, usage in one sidecar."
+description = "Merged stats plugin for the gray agent harness: observe, stamp, usage in one sidecar."
 
 [[bin]]
-name = "telemetry"
+name = "stats"
 path = "src/main.rs"
 
 [dependencies]

@@ -1,4 +1,4 @@
-//! gray-telemetry — one sidecar for every local event ledger.
+//! gray-stats — one sidecar for every local event ledger.
 //!
 //! Merges gray-observe, gray-stamp and gray-usage. Each source lives
 //! verbatim in `mods/` with its own state files and slash commands — only
@@ -48,7 +48,7 @@ const PARTS: &[parts::Part] = &[
 ];
 
 fn manifest(parts: &parts::Parts) -> Value {
-    let mut commands: Vec<&str> = vec!["/telemetry"];
+    let mut commands: Vec<&str> = vec!["/stats"];
     if parts.on("observe") {
         commands.push("/observe");
     }
@@ -68,7 +68,7 @@ fn manifest(parts: &parts::Parts) -> Value {
         hooks.push("prompt/context");
     }
     json!({
-        "name": "telemetry",
+        "name": "stats",
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": "1.1",
         "tools": [],
@@ -81,12 +81,12 @@ fn manifest(parts: &parts::Parts) -> Value {
 }
 
 /// Per-process module state: observe's log dir and stamp's in-flight timers.
-struct Telemetry {
+struct Stats {
     observe_dir: PathBuf,
     stamp: stamp::State,
 }
 
-impl Telemetry {
+impl Stats {
     fn new() -> Self {
         Self {
             observe_dir: observe::observe_dir(),
@@ -95,10 +95,10 @@ impl Telemetry {
     }
 }
 
-/// `/telemetry` — merged-plugin overview.
-fn telemetry_command() -> String {
+/// `/stats` — merged-plugin overview.
+fn stats_command() -> String {
     format!(
-        "gray-telemetry {} — one sidecar, three local event ledgers:\n\
+        "gray-stats {} — one sidecar, three local event ledgers:\n\
          \x20 /observe [tail N]     JSONL turn/tool events under ~/.gray/observe\n\
          \x20 /stamps [clear|path]  per-session timing ledger under ~/.gray/stamps\n\
          \x20 /usage, /tokens [all|reset]  token + cost report, ~/.gray/usage",
@@ -106,7 +106,7 @@ fn telemetry_command() -> String {
     )
 }
 
-fn handle(req: &Value, t: &Telemetry, parts: &parts::Parts) -> (Option<Value>, bool) {
+fn handle(req: &Value, t: &Stats, parts: &parts::Parts) -> (Option<Value>, bool) {
     let id = req.get("id").cloned();
     let method = req.get("method").and_then(Value::as_str).unwrap_or("");
     let params = req.get("params").cloned().unwrap_or(Value::Null);
@@ -137,9 +137,9 @@ fn handle(req: &Value, t: &Telemetry, parts: &parts::Parts) -> (Option<Value>, b
         "command/run" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or("");
             let reply = match name {
-                "/telemetry" => {
+                "/stats" => {
                     return (
-                        Some(json!({ "id": id, "result": { "text": telemetry_command() } })),
+                        Some(json!({ "id": id, "result": { "text": stats_command() } })),
                         false,
                     );
                 }
@@ -153,7 +153,7 @@ fn handle(req: &Value, t: &Telemetry, parts: &parts::Parts) -> (Option<Value>, b
                     .get("result")
                     .cloned()
                     .unwrap_or_else(|| json!({ "text": format!("{name}: error") })),
-                None => json!({ "text": format!("unknown command {name} — try /telemetry") }),
+                None => json!({ "text": format!("unknown command {name} — try /stats") }),
             }
         }
         "plugin/shutdown" => return (Some(json!({ "id": id, "result": {} })), true),
@@ -166,12 +166,12 @@ fn handle(req: &Value, t: &Telemetry, parts: &parts::Parts) -> (Option<Value>, b
 }
 
 fn main() -> std::io::Result<()> {
-    let parts = parts::Parts::load("telemetry", PARTS);
+    let parts = parts::Parts::load("stats", PARTS);
     if std::env::args().nth(1).as_deref() == Some("manifest") {
         println!("{}", manifest(&parts));
         return Ok(());
     }
-    let t = Telemetry::new();
+    let t = Stats::new();
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {
